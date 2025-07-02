@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Maze</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+
+  <div id="page">
+
+    <div id="Message-Container">
+      <div id="message">
+        <h1><b>Hurray!</b></h1>
+        <p><b>You made the mouse happy!</b></p>
+        <p id="moves"></p>
+        <input id="okBtn" type="button" onclick="toggleVisablity('Message-Container')" value="Yayy!!" />
+      </div>
+    </div>
+
+    <br>
+    <div id="menu">
+      <div class="custom-select">
+        <label><b>Customize difficulty level : </b></label>
+        <select id="diffSelect">
+                  <option value="10">Noob</option>
+                  <option value="15">Expert</option>
+                  <option value="25">Pro</option>
+                  <option value="38">Legend</option>                                      
+              </select>
+      </div>
+    </div>
+
+    <div id="view">
+      <div id="mazeContainer">
+        <canvas id="mazeCanvas" class="border" height="1100" width="1100"></canvas>
+      </div>
+
+      <video id="cam" autoplay playsinline style="display:none"></video>
+      
+    </div>
+    <br>
+    <p id="instructions"><b>Let's find the cheesiest path!</b></p>
+    <div>
+      <input
+        id="startMazeBtn"
+        type="button"
+        value="Start"
+        onclick="makeMaze()"
+      />
+    </div>
+  </div>
+
+  <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+  <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery.touchswipe/1.6.18/jquery.touchSwipe.min.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/hand-pose-detection"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
+<script src="./script.js"></script>
+</body>
+</html>
