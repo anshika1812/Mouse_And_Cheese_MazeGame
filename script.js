@@ -590,97 +590,124 @@ function rand(max) {
   }
 
 (async () => {
+    
   const video = Object.assign(document.createElement("video"), {
     autoplay:true, playsInline:true, muted:true
   });
-  video.style.cssText = 
-    `position:fixed; bottom:14px; right:14px; width:200px;
-    border:2px solid #fff; border-radius:8px; z-index:9999;
-    box-shadow:0 0 6px rgba(0,0,0,.35);
-    opacity: 1;`
-  ;
+  video.style.cssText = `
+    position:fixed; bottom:14px; right:14px;
+    width:320px;                               /* make preview bigger */
+    border:2px solid #fff; border-radius:8px;
+    box-shadow:0 0 6px rgba(0,0,0,.35); z-index:9998;
+  `;
   document.body.appendChild(video);
 
   const skel = document.createElement("canvas");
-  const sCtx = skel.getContext("2d");
-  skel.style.cssText = 
-    `position:fixed; bottom:14px; right:14px; pointer-events:none; z-index:9999;`
-  ;
+  const ctx  = skel.getContext("2d");
+  skel.style.cssText = `
+    position:fixed; bottom:14px; right:14px;
+    pointer-events:none; z-index:9999;
+  `;
   document.body.appendChild(skel);
 
+  
   const stream = await navigator.mediaDevices.getUserMedia({ video:true });
   video.srcObject = stream;
   await video.play();
-  skel.width  = video.videoWidth;
-  skel.height = video.videoHeight;
+
+  const fit = () => {           // keep canvas size = displayed video
+    skel.width  = video.clientWidth;
+    skel.height = video.clientHeight;
+  };
+  fit();  window.addEventListener("resize", fit);
 
   const detector = await handPoseDetection.createDetector(
     handPoseDetection.SupportedModels.MediaPipeHands,
-    { runtime:"mediapipe", modelType:"lite", maxHands:1,
-      solutionPath:"https://cdn.jsdelivr.net/npm/@mediapipe/hands" });
+    {
+      runtime:"mediapipe",
+      modelType:"lite",
+      maxHands:1,
+      flipHorizontal:true,            // mirror to feel natural
+      enableSmoothingLandmarks:true,
+      solutionPath:"https://cdn.jsdelivr.net/npm/@mediapipe/hands"
+    });
 
-  const X_T = 0.09 * video.videoWidth;    
-  const Y_T = 0.09 * video.videoHeight;
-  const POSE_FRAMES = 6;                  
-  const COOLDOWN_MS = 250;
-  const NEUTRAL_FRAMES = 3;
-
-  let poseCounter = 0, neutralCounter = 0;
-  let lastPose = "neutral", lastFireTime = 0;
-  const bones = [                         
+  const RAW_W = 640, RAW_H = 480;               // default model frame
+  const X_T = 0.09 * RAW_W,  Y_T = 0.09 * RAW_H;  // 9 % thresholds
+  const HOLD_FRAMES = 8;        // keep last skeleton this many frames
+  const bones = [
     [0,1],[1,2],[2,3],[3,4],
     [0,5],[5,6],[6,7],[7,8],
     [0,9],[9,10],[10,11],[11,12],
     [0,13],[13,14],[14,15],[15,16],
     [0,17],[17,18],[18,19],[19,20]
   ];
+  const fireArrow = k =>
+    window.dispatchEvent(new KeyboardEvent("keydown",{keyCode:k,which:k}));
 
-  const fire = code =>
-    window.dispatchEvent(new KeyboardEvent("keydown",{keyCode:code,which:code}));
+  let cached = null, miss = 0;
+  let lastPose = "neutral";
 
-  async function loop(){
-    const hands = await detector.estimateHands(video,{flipHorizontal:true});
-    sCtx.clearRect(0,0,skel.width,skel.height);
+  async function frame() {
+    const hands = await detector.estimateHands(video);
 
-    let pose = "neutral";
+    if (hands.length) {          // got a hand this frame
+      cached = {
+        kp:   hands[0].keypoints,
+        hand: hands[0].handedness
+      };
+      miss = 0;
+    } else if (miss < HOLD_FRAMES) {
+      miss++;
+    } else {
+      cached = null;             // lost hand for too long
+    }
 
-    if(hands.length){
-      const kp = hands[0].keypoints;
+    ctx.clearRect(0,0,skel.width,skel.height);
 
-      sCtx.strokeStyle="#00e5ff"; sCtx.lineWidth=2;
+    if (cached) {
+      const { kp, hand } = cached;
+      const sx = skel.width  / RAW_W;
+      const sy = skel.height / RAW_H;
+      const color = hand === "Right" ? "#00e5ff" : "#ff9800";
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth   = 2;
       bones.forEach(([a,b])=>{
-        sCtx.beginPath();
-        sCtx.moveTo(kp[a].x,kp[a].y);
-        sCtx.lineTo(kp[b].x,kp[b].y);
-        sCtx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(kp[a].x*sx, kp[a].y*sy);
+        ctx.lineTo(kp[b].x*sx, kp[b].y*sy);
+        ctx.stroke();
       });
-      kp.forEach(pt=>{
-        sCtx.beginPath();
-        sCtx.arc(pt.x,pt.y,3,0,2*Math.PI);
-        sCtx.fillStyle="#ff4081";
-        sCtx.fill();
+      kp.forEach((pt,i)=>{
+        ctx.beginPath();
+        ctx.arc(pt.x*sx, pt.y*sy, i===8||i===4?8:5, 0, 2*Math.PI);
+        ctx.fillStyle = i===8 ? "#ffeb3b" : i===4 ? "#ff5722" : "#ff4081";
+        ctx.fill();
       });
 
-      const idxTip=kp[8], idxBase=kp[5], thTip=kp[4], thBase=kp[2];
+      let pose = "neutral";
+      const idxTip = kp[8], idxBase = kp[5], thTip = kp[4], thBase = kp[2];
+      if (idxTip.y < idxBase.y - Y_T) pose = "up";
+      else if (idxTip.y > idxBase.y + Y_T) pose = "down";
+      else if (thTip.x > thBase.x + X_T)   pose = "right";
+      else if (thTip.x < thBase.x - X_T)   pose = "left";
 
-      if(idxTip.y < idxBase.y - Y_T)         pose = "up";
-      else if(idxTip.y > idxBase.y + Y_T)    pose = "down";
-      else if(thTip.x > thBase.x + X_T)      pose = "right";
-      else if(thTip.x < thBase.x - X_T)      pose = "left";
+      if (pose !== "neutral" && lastPose === "neutral") {
+        if (pose === "up")    fireArrow(38);
+        if (pose === "down")  fireArrow(40);
+        if (pose === "right") fireArrow(37);
+        if (pose === "left")  fireArrow(39);
+      }
+      lastPose = pose;
+    } else {
+      lastPose = "neutral";
     }
 
-    if(pose!=="neutral" && pose!==lastPose){
-      if(pose==="up")    fire(38);
-      if(pose==="down")  fire(40);
-      if(pose==="right") fire(39);
-      if(pose==="left")  fire(37);
-    }
-    lastPose = pose;
-
-    requestAnimationFrame(loop);
+    requestAnimationFrame(frame);
   }
-  loop();
+  frame();
 
-  window.stopPoseController = () =>
-    stream.getTracks().forEach(t=>t.stop());
+  window.stopPoseHUD = () =>
+    stream.getTracks().forEach(t => t.stop());
 })();
